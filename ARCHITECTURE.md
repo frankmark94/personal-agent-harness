@@ -10,10 +10,39 @@ tool definitions, tool results), it either replies with text or emits
 tool calls. It never touches the world directly — every effect goes
 through a tool.
 
-Provider-agnostic means: talk to any **OpenAI-compatible chat completions
-API**. The loop sends `messages` + `tools` (JSON Schema function
-definitions) and parses `tool_calls` from the response. Swapping providers
-is a config change, not a code change. See `agent/loop.py`.
+Provider-agnostic means: the loop never does HTTP itself. It calls
+`provider.chat(messages, tools)` on a `Provider` object built by
+`agent/providers.py` from the `provider:` section of the config, and
+always gets back an OpenAI-shaped chat completion dict
+(`choices[0].message` with optional `tool_calls`). Provider-specific
+wire formats are converted at the boundary, so swapping providers is a
+config change, not a code change.
+
+Three providers ship in the scaffold:
+
+- **`openai_compatible`** — `POST {base_url}/chat/completions` with
+  `{model, messages, tools}`. Covers OpenAI, OpenRouter, Ollama, vLLM,
+  LiteLLM proxies. Auth: plain API key as a Bearer token.
+- **`anthropic`** — Anthropic's messages API (`x-api-key` header).
+  The provider converts OpenAI-style tool definitions into Anthropic
+  `tools`/`input_schema`, splits `system` out of the message list,
+  maps `tool_calls` ↔ `tool_use`/`tool_result` blocks, and converts
+  the response back to the OpenAI shape. Auth: plain API key.
+- **`github_copilot`** — targets the **unofficial** Copilot chat
+  completions endpoint (`https://api.githubcopilot.com/chat/completions`),
+  which speaks OpenAI-compatible chat completions. Auth: a short-lived
+  token derived from the user's *own paid Copilot subscription* via
+  `get_copilot_token()` (community pattern: exchange a GitHub token at
+  the Copilot internal token endpoint; best-effort, shape subject to
+  change). This endpoint is not a public API, may break at any time,
+  and the user should review GitHub's terms before using it.
+
+Secrets never live in config files: `agent/config.py` resolves
+`${ENV_VAR}` references at load time, so `config.yaml` holds env var
+*names* (`api_key: "${OPENAI_API_KEY}"`) and the shell holds the values.
+Referencing an unset variable is a hard error at startup.
+
+See `agent/providers.py`, `agent/config.py`, `agent/loop.py`.
 
 ## 2. Agent runtime loop: reason → act → observe
 

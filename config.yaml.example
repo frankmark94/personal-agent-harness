@@ -1,10 +1,26 @@
 # Copy to config.yaml and fill in your values.
+# Any ${VAR} is resolved from the environment at load time — put env var
+# NAMES here, never raw keys.
 
-model:
-  # Any OpenAI-compatible chat completions endpoint.
+provider:
+  # Which model backend to use:
+  #   openai_compatible — any OpenAI-style chat completions endpoint
+  #                       (OpenAI, OpenRouter, Ollama, vLLM, LiteLLM, ...)
+  #   anthropic         — Anthropic's messages API
+  #   github_copilot    — UNOFFICIAL Copilot endpoint; see agent/providers.py
+  #                       warnings. Requires your own paid Copilot plan.
+  kind: "openai_compatible"
+
+  model: "gpt-4o-mini"          # e.g. "claude-sonnet-4-5" for anthropic,
+                               #      "gpt-4o" for github_copilot
+
+  # Only used when kind is openai_compatible.
   base_url: "https://api.openai.com/v1"
-  name: "gpt-4o-mini"
-  api_key_env: "OPENAI_API_KEY"   # env var holding the key, never the key itself
+
+  # Path A (API key):  api_key: "${OPENAI_API_KEY}"
+  # Path B (Copilot):  api_key: "${COPILOT_TOKEN}"   (short-lived token from
+  #                    agent.providers.get_copilot_token; see README)
+  api_key: "${OPENAI_API_KEY}"
 
 paths:
   workspace: "~/agent-workspace"
