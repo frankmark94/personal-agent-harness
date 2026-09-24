@@ -1,0 +1,4 @@
+# Minimal deps for the scaffold. The loop itself only needs an
+# HTTP client; everything else is stdlib.
+requests>=2.31
+pyyaml>=6.0

@@ -1,0 +1,25 @@
+# Copy to config.yaml and fill in your values.
+
+model:
+  # Any OpenAI-compatible chat completions endpoint.
+  base_url: "https://api.openai.com/v1"
+  name: "gpt-4o-mini"
+  api_key_env: "OPENAI_API_KEY"   # env var holding the key, never the key itself
+
+paths:
+  workspace: "~/agent-workspace"
+  memory_dir: "~/agent-workspace/memory"
+  skills_dir: "~/agent-workspace/skills"
+
+user:
+  timezone: "America/New_York"
+  name: "Ada"
+
+approvals:
+  # consequential actions always pause for confirmation; reversible ones don't
+  policy: "confirm_consequential"   # or: always_confirm | never_confirm (not recommended)
+  timeout_seconds: 300              # how long to wait for a yes/no before aborting
+
+scheduler:
+  jobs_file: "~/agent-workspace/scheduler/jobs.json"
+  poll_interval_seconds: 60
