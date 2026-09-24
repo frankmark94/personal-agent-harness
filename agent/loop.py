@@ -20,7 +20,7 @@ from . import providers
 from .tools import registry as tools
 
 
-def run_loop(user_task: str, cfg: dict, ask_user=approvals.console_ask) -> str:
+def run_loop(user_task: str, cfg: dict, ask_user=approvals.terminal_ask) -> str:
     provider = providers.from_config(cfg["provider"])
 
     messages = [
@@ -42,7 +42,10 @@ def run_loop(user_task: str, cfg: dict, ask_user=approvals.console_ask) -> str:
             name = call["function"]["name"]
             args = json.loads(call["function"].get("arguments") or "{}")
             try:
-                approvals.check(name, args, policy=cfg["approvals"], ask_user=ask_user)
+                # check() gates consequential calls and returns the final
+                # (possibly user-edited) args to run with.
+                args = approvals.check(name, args, policy=cfg["approvals"],
+                                       ask_user=ask_user)
                 result = tools.run(name, args)
             except approvals.Denied as e:
                 result = {"ok": False, "error": f"denied by approval gate: {e}"}
@@ -73,7 +76,7 @@ DEFAULT_CFG = {
         "base_url": os.environ.get("AGENT_BASE_URL", "https://api.openai.com/v1"),
         "api_key": os.environ.get("AGENT_API_KEY", ""),
     },
-    "approvals": {"policy": "confirm_consequential", "timeout_seconds": 300},
+    "approvals": {"policy": "confirm_consequential", "timeout_seconds": 120},
 }
 
 

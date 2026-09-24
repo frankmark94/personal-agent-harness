@@ -28,11 +28,9 @@ raw activity into durable memory.
 
 ## Sketch
 
-```python
-# TODO: real implementation
-def consolidate(memory_dir, since_watermark):
-    notes = read_notes_since(memory_dir, since_watermark)
-    candidates = llm_extract(memory_dir, notes)   # model call, not regex
-    apply_promotions(memory_dir, candidates)      # edits MEMORY.md etc.
-    write_watermark(memory_dir, now())
-```
+The nightly version of this pass is implemented in `agent/dream.py`:
+it reflects over the day's notes and MEMORY.md, saves a dated report
+to `memory/dreams/YYYY-MM-DD.md`, and appends only deduplicated
+`@@UPDATE@@` one-liners to MEMORY.md (never destructive). Still future
+work: the frequent (hourly) watermark-based pass with people/group page
+updates and a `last_consolidated` watermark.

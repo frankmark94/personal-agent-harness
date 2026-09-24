@@ -34,8 +34,8 @@ user:
 approvals:
   # consequential actions always pause for confirmation; reversible ones don't
   policy: "confirm_consequential"   # or: always_confirm | never_confirm (not recommended)
-  timeout_seconds: 300              # how long to wait for a yes/no before aborting
+  timeout_seconds: 120              # how long to wait for a yes/no before aborting (deny on timeout)
 
 scheduler:
-  jobs_file: "~/agent-workspace/scheduler/jobs.json"
+  jobs_file: "~/agent-workspace/scheduler/jobs.json"  # jobs carry a "cron:" expression (5-field)
   poll_interval_seconds: 60

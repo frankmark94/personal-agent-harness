@@ -8,9 +8,12 @@ gates.
 ## Honest note
 
 This is a **clean-room reconstruction from observable patterns**, not a copy
-of any production system. Every file is a skeleton with TODO markers where a
-real implementation would go. It is meant to teach the architecture and give
-you a starting point, not to be a finished framework.
+of any production system. It is meant to teach the architecture and give
+you a starting point, not to be a finished framework. The core subsystems
+— cron parsing, the approval UI, BM25 skill search, and the nightly
+dreaming pass — are real, tested implementations. Remaining rough edges
+(sandboxing, path jailing, Copilot token caching, …) are marked with
+honest TODOs in the code.
 
 ## The idea in one paragraph
 
@@ -91,8 +94,58 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design doc.
 | `agent/providers.py` | Provider abstraction: OpenAI-compatible, Anthropic, GitHub Copilot (unofficial) |
 | `agent/config.py` | Config loader with `${ENV_VAR}` interpolation |
 | `agent/tools/` | Example tools (shell exec, file read/write) + registry |
-| `agent/approvals.py` | Reversible vs consequential action gates |
-| `memory/` | MEMORY.md template, daily notes, people/groups pages |
-| `skills/` | SKILL.md spec, one example skill, loader sketch |
-| `scheduler/` | Cron-like scheduler sketch + event-hook concept |
+| `agent/approvals.py` | Approval gates: card UI, approve/deny/edit, timeout, JSONL audit log |
+| `agent/dream.py` | Nightly dreaming pass: reflection report + safe MEMORY.md updates |
+| `memory/` | MEMORY.md, daily notes, people/groups pages, `dreams/` reports |
+| `skills/` | SKILL.md spec, one example skill, BM25 loader + search |
+| `scheduler/` | Real 5-field cron parser (`next_run`) + persistent job poller |
 | `config.yaml.example` | Model endpoint, paths, timezone, approval policy |
+
+## Recurring work
+
+Two kinds: **cron jobs** (poll-based, at-least-once) and the **dreaming pass**.
+
+Add a cron job to `~/agent-workspace/scheduler/jobs.json`:
+
+```json
+[
+  {"id": "morning-brief", "cron": "0 7 * * MON-FRI",
+   "task": "Write my morning briefing.", "enabled": true}
+]
+```
+
+Then poll for due jobs (wire `run_pending` to `agent.loop.run_loop`):
+
+```python
+from scheduler.scheduler import load_jobs, run_pending
+from agent.loop import run_loop, load_app_config
+
+cfg = load_app_config()
+run_pending(load_jobs(), lambda job: run_loop(job["task"], cfg))
+```
+
+The cron parser (`scheduler/scheduler.py`) supports standard 5-field
+expressions: ranges, steps, lists, and `MON`/`JAN`-style names, e.g.
+`*/15 9-17 * * MON-FRI`. `next_run(expr, after)` computes the next fire
+time; run the scheduler on UTC and write expressions in UTC to avoid
+DST ambiguity.
+
+The **nightly dreaming pass** (`agent/dream.py`) reflects over the day's
+memory and writes a dated report to `memory/dreams/`, applying only
+append-style, deduplicated updates to MEMORY.md. Run it manually:
+
+```bash
+python -m agent.dream --dry-run   # inspect the plan, change nothing
+python -m agent.dream             # run tonight's pass
+```
+
+Or schedule it with cron (3 AM daily):
+
+```bash
+0 3 * * * cd ~/personal-agent-harness && python -m agent.dream >> dream-cron.log 2>&1
+```
+
+Headless runs can set `HARNESS_AUTO_APPROVE=deny` (deny everything) or
+`HARNESS_AUTO_APPROVE=approve-reversible` (auto-approve reversible
+actions only, deny consequential ones) so the approval gate fails closed
+instead of blocking on a prompt.

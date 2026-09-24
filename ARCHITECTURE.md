@@ -76,15 +76,18 @@ Design rule: anything that must survive a restart lives under the
 workspace directory, never in process memory. Treat `/tmp` and anything
 outside the workspace as ephemeral.
 
-## 4. Scheduler: cron-like jobs + event hooks
+## 4. Scheduler: cron jobs + event hooks
 
 Two kinds of background work:
 
-- **Cron-like recurring jobs.** A persistent job list (e.g. JSON on disk):
-  each job has a schedule expression, a prompt/task, and last-run state.
-  A poller wakes up, finds due jobs, and injects their task into the
-  agent loop as a fresh turn. Jobs must be idempotent — assume they can
-  run twice.
+- **Cron recurring jobs.** A persistent job list (JSON on disk):
+  each job has a `cron:` expression (standard 5-field, parsed by
+  `scheduler/scheduler.py` — ranges, steps, lists, `MON`/`JAN` names),
+  a prompt/task, and last-run state. `next_run(expr, after)` computes
+  the next fire time; `due_jobs()` finds jobs whose next run is due;
+  `run_pending()` hands each one's task to the agent loop as a fresh
+  turn. Jobs must be idempotent — assume they can run twice. Run the
+  scheduler on UTC and write expressions in UTC to avoid DST ambiguity.
 - **Event hooks.** "When X happens, do Y": a new email arrives, a file
   changes, a webhook fires. Hooks are scripts or job definitions with a
   trigger instead of a schedule. Time-based and event-based are kept
@@ -108,6 +111,16 @@ new signal): it reads recent notes and conversation, extracts durable
 facts, and updates `MEMORY.md` and the people/group pages. Raw notes are
 never edited — consolidation only promotes upward. See `memory/`.
 
+A **nightly dreaming pass** (`agent/dream.py`, run via cron) reflects
+over the day: it feeds `MEMORY.md`, the daily notes, and recent dream
+reports to the model and asks for candidate memory updates, alignment
+observations, and open questions. The full reflection is saved as a
+dated report in `memory/dreams/YYYY-MM-DD.md`. Only safe,
+clearly-scoped updates — one-liners the model marks with `@@UPDATE@@` —
+are appended (deduplicated) to a "Dream updates" section of MEMORY.md;
+nothing is ever destructively rewritten. `--dry-run` previews the pass
+without changing anything.
+
 Why files: human-readable, trivially backed up, diffable, and the agent
 already has file tools — no new infrastructure.
 
@@ -118,15 +131,17 @@ with YAML frontmatter (`name`, `description`) plus instructions,
 examples, and scripts. Examples: reading Gmail, booking travel,
 searching products.
 
-- **Discovery:** at task start, the agent keyword-searches skill
-  descriptions against the request and loads only the best match into
-  context. Skills stay out of the prompt until needed.
+- **Discovery:** at task start, the agent BM25-searches skill
+  name + description + body against the request
+  (`skills/loader.py: rank_skills`, pure-Python Okapi BM25) and loads
+  only the best match into context. Skills stay out of the prompt
+  until needed.
 - **Authoring:** when a recurring workflow proves useful, the agent
   writes it up as a new skill; ineffective skills are retired.
 - Relative paths inside a skill resolve against the skill's own
   directory, so skills are portable.
 
-See `skills/` for the spec and a loader sketch.
+See `skills/` for the spec and the BM25 loader.
 
 ## 7. Tool integrations behind one interface
 
@@ -152,13 +167,21 @@ Actions are classified **reversible** vs **consequential**:
   run freely.
 - *Consequential* (send a message/email, make a purchase or booking,
   use a credential, join a network, delete data, change persistent
-  state like scheduled jobs): **pause and ask the user**, showing
-  exactly what will happen. Proceed only on explicit confirmation.
+  state like scheduled jobs): **pause and ask the user** with an
+  approval card showing exactly what will happen — tool, arguments,
+  and why it was flagged. The user replies `[a]pprove / [d]eny /
+  [e]dit-and-approve`, with a configurable timeout (default 120s;
+  timeout = deny). Every decision is appended to a JSONL audit log
+  with timestamp, action, decision, and reason. Proceed only on
+  explicit confirmation.
 
 The gate sits between the model's tool call and the tool's execution —
-the model cannot bypass it. Timeouts default to abort. Standing
-permissions (e.g. "this scheduled job may send its own emails") are
-explicit, narrow, and revocable. See `agent/approvals.py`.
+the model cannot bypass it. Timeouts default to abort. Headless runs
+set `HARNESS_AUTO_APPROVE=deny` (deny everything) or
+`HARNESS_AUTO_APPROVE=approve-reversible` (auto-approve reversible
+only) so the gate fails closed instead of blocking on a prompt.
+Standing permissions (e.g. "this scheduled job may send its own emails")
+are explicit, narrow, and revocable. See `agent/approvals.py`.
 
 ## 9. Proactivity
 
